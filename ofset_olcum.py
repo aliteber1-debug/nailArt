@@ -230,20 +230,7 @@ class OffsetCalibrationTool:
                         print(f"📍 Hedef: X={next_point.x:.2f}, Y={next_point.y:.2f} mm")
                         print("🚀 Hareket ediliyor...")
 
-                        # Hedef pozisyona göreceli hareket hesapla
-                        target_x = next_point.x + self.controller.motor_offset['x']
-                        target_y = next_point.y + self.controller.motor_offset['y']
-
-                        delta_x = target_x - self.controller.current_pos['x']
-                        delta_y = target_y - self.controller.current_pos['y']
-
-                        print(f"📏 Delta: X={delta_x:.2f}, Y={delta_y:.2f} mm")
-
-                        # Hareketi gerçekleştir
-                        if abs(delta_x) > 0.1:
-                            self.move_motor_relative('X', delta_x)
-                        if abs(delta_y) > 0.1:
-                            self.move_motor_relative('Y', delta_y)
+                        self.controller.move_to_position(next_point.x, next_point.y)
 
                         # Offset'leri sıfırla (yeni nokta için)
                         self.manual_offset_x = 0.0
@@ -265,20 +252,7 @@ class OffsetCalibrationTool:
                         print(f"📍 Hedef: X={prev_point.x:.2f}, Y={prev_point.y:.2f} mm")
                         print("🚀 Hareket ediliyor...")
 
-                        # Hedef pozisyona göreceli hareket hesapla
-                        target_x = prev_point.x + self.controller.motor_offset['x']
-                        target_y = prev_point.y + self.controller.motor_offset['y']
-
-                        delta_x = target_x - self.controller.current_pos['x']
-                        delta_y = target_y - self.controller.current_pos['y']
-
-                        print(f"📏 Delta: X={delta_x:.2f}, Y={delta_y:.2f} mm")
-
-                        # Hareketi gerçekleştir
-                        if abs(delta_x) > 0.1:
-                            self.move_motor_relative('X', delta_x)
-                        if abs(delta_y) > 0.1:
-                            self.move_motor_relative('Y', delta_y)
+                        self.controller.move_to_position(prev_point.x, prev_point.y)
 
                         # Offset'leri sıfırla (yeni nokta için)
                         self.manual_offset_x = 0.0
@@ -312,20 +286,7 @@ class OffsetCalibrationTool:
                         print(f"📍 Hedef: X={next_nail_first_point.x:.2f}, Y={next_nail_first_point.y:.2f} mm")
                         print("🚀 Hareket ediliyor...")
 
-                        # Hedef pozisyona göreceli hareket hesapla
-                        target_x = next_nail_first_point.x + self.controller.motor_offset['x']
-                        target_y = next_nail_first_point.y + self.controller.motor_offset['y']
-
-                        delta_x = target_x - self.controller.current_pos['x']
-                        delta_y = target_y - self.controller.current_pos['y']
-
-                        print(f"📏 Delta: X={delta_x:.2f}, Y={delta_y:.2f} mm")
-
-                        # Hareketi gerçekleştir
-                        if abs(delta_x) > 0.1:
-                            self.move_motor_relative('X', delta_x)
-                        if abs(delta_y) > 0.1:
-                            self.move_motor_relative('Y', delta_y)
+                        self.controller.move_to_position(next_nail_first_point.x, next_nail_first_point.y)
 
                         # Offset'leri sıfırla (yeni tırnak için)
                         self.manual_offset_x = 0.0
@@ -364,10 +325,10 @@ class OffsetCalibrationTool:
         print(f"Y Offset: {self.manual_offset_y:+.3f} mm")
         print(f"Z Offset: {self.manual_offset_z:+.3f} mm")
 
-        print("\nBu değerleri shared_config.py'de kullanabilirsiniz:")
-        print(f"'MOTOR_OFFSET_X': {self.manual_offset_x:.3f},")
-        print(f"'MOTOR_OFFSET_Y': {self.manual_offset_y:.3f},")
-        print(f"'MOTOR_OFFSET_Z': {self.manual_offset_z:.3f},")
+        print("\nBu değerleri shared_config.py'de MOTOR_CONFIG içine yazın:")
+        print(f"'OFFSET_X': {self.manual_offset_x:.2f},")
+        print(f"'OFFSET_Y': {self.manual_offset_y:.2f},")
+        print(f"'OFFSET_Z': {self.manual_offset_z:.2f},")
 
         # Sonuçları dosyaya kaydet
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -379,9 +340,9 @@ class OffsetCalibrationTool:
             f.write(f"# Koordinat Dosyası: {os.path.basename(self.coord_file) if self.coord_file else 'N/A'}\n")
             f.write("\n")
             f.write("# shared_config.py'deki MOTOR_CONFIG içine ekleyin:\n")
-            f.write(f"'MOTOR_OFFSET_X': {self.manual_offset_x:.3f},\n")
-            f.write(f"'MOTOR_OFFSET_Y': {self.manual_offset_y:.3f},\n")
-            f.write(f"'MOTOR_OFFSET_Z': {self.manual_offset_z:.3f},\n")
+            f.write(f"'OFFSET_X': {self.manual_offset_x:.2f},\n")
+            f.write(f"'OFFSET_Y': {self.manual_offset_y:.2f},\n")
+            f.write(f"'OFFSET_Z': {self.manual_offset_z:.2f},\n")
             f.write("\n")
             f.write("# Detaylı Bilgiler:\n")
             f.write(f"# X Offset: {self.manual_offset_x:+.3f} mm\n")
@@ -419,6 +380,8 @@ def main():
     except Exception as e:
         print(f"\n\n❌ Hata: {e}")
     finally:
+        if tool and hasattr(tool, 'controller') and tool.controller:
+            tool.controller.cleanup()
         print("\n👋 Program sonlandırıldı")
 
 
