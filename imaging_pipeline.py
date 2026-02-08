@@ -267,22 +267,34 @@ class NailImagingPipeline:
             area_mm2 = area_px / avg_px_per_mm2
 
             if min_area_px <= area_px <= max_area_px:
+                # Centroid (ağırlık merkezi) hesapla - boundingRect'ten daha güvenilir
+                M = cv2.moments(contour)
+                if M['m00'] > 0:
+                    centroid_x = M['m10'] / M['m00']
+                else:
+                    centroid_x = cv2.boundingRect(contour)[0]
+
                 filtered_nails.append({
                     'contour': contour,
                     'area_px': area_px,
                     'area_mm2': area_mm2,
-                    'id': len(filtered_nails) + 1
+                    'centroid_x': centroid_x,
+                    'id': 0  # Sıralama sonrası atanacak
                 })
 
         if not filtered_nails:
             raise ValueError(f"❌ Uygun boyutta tırnak bulunamadı!")
 
-        # X koordinatına göre sırala (sağdan sola - serçe parmaktan başlayarak)
-        filtered_nails.sort(key=lambda x: cv2.boundingRect(x['contour'])[0], reverse=False)
+        # Centroid X koordinatına göre sırala (soldan sağa sıralı tarama)
+        filtered_nails.sort(key=lambda x: x['centroid_x'])
 
-        print(f"\n🎯 Tırnak analizi:")
+        # Sıralama sonrası ID'leri sıralı olarak yeniden ata
+        for i, nail in enumerate(filtered_nails):
+            nail['id'] = i + 1
+
+        print(f"\n🎯 Tırnak analizi (soldan sağa sıralı):")
         for nail in filtered_nails:
-            print(f"   • Tırnak {nail['id']}: {nail['area_mm2']:.1f} mm²")
+            print(f"   • Tırnak {nail['id']}: {nail['area_mm2']:.1f} mm² (X merkez: {nail['centroid_x']:.0f} px)")
 
         return filtered_nails
 
