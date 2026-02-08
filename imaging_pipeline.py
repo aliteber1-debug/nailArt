@@ -267,34 +267,22 @@ class NailImagingPipeline:
             area_mm2 = area_px / avg_px_per_mm2
 
             if min_area_px <= area_px <= max_area_px:
-                # Centroid (ağırlık merkezi) hesapla - boundingRect'ten daha güvenilir
-                M = cv2.moments(contour)
-                if M['m00'] > 0:
-                    centroid_x = M['m10'] / M['m00']
-                else:
-                    centroid_x = cv2.boundingRect(contour)[0]
-
                 filtered_nails.append({
                     'contour': contour,
                     'area_px': area_px,
                     'area_mm2': area_mm2,
-                    'centroid_x': centroid_x,
-                    'id': 0  # Sıralama sonrası atanacak
+                    'id': len(filtered_nails) + 1
                 })
 
         if not filtered_nails:
             raise ValueError(f"❌ Uygun boyutta tırnak bulunamadı!")
 
-        # Centroid X koordinatına göre sırala (soldan sağa sıralı tarama)
-        filtered_nails.sort(key=lambda x: x['centroid_x'])
+        # X koordinatına göre sırala (sağdan sola - serçe parmaktan başlayarak)
+        filtered_nails.sort(key=lambda x: cv2.boundingRect(x['contour'])[0], reverse=False)
 
-        # Sıralama sonrası ID'leri sıralı olarak yeniden ata
-        for i, nail in enumerate(filtered_nails):
-            nail['id'] = i + 1
-
-        print(f"\n🎯 Tırnak analizi (soldan sağa sıralı):")
+        print(f"\n🎯 Tırnak analizi:")
         for nail in filtered_nails:
-            print(f"   • Tırnak {nail['id']}: {nail['area_mm2']:.1f} mm² (X merkez: {nail['centroid_x']:.0f} px)")
+            print(f"   • Tırnak {nail['id']}: {nail['area_mm2']:.1f} mm²")
 
         return filtered_nails
 
@@ -691,20 +679,14 @@ class NailImagingPipeline:
         return saved_files
 
     def visualize_results(self, original_image, binary_mask, all_nail_results, timestamp):
-        """Sonuçları görselleştir - Sıralama ve renkler doğru eşleştirilmiş"""
+        """Sonuçları görselleştir - MOTOR KOORDİNATLARI GÖSTER"""
         if not SYSTEM_CONFIG['ENABLE_VISUALIZATION']:
             return None
 
         print("\n📊 Görselleştirme oluşturuluyor...")
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-        fig.suptitle(f'Tırnak Tarama Analizi - {timestamp}\n(Tarama sırası: 1 → {len(all_nail_results)})',
-                     fontsize=14, fontweight='bold')
-
-        # BGR renk paleti (OpenCV subplot'ları için)
-        colors_bgr = [(255, 0, 0), (0, 180, 0), (0, 0, 255), (255, 200, 0), (255, 0, 255)]
-        # RGB normalize renk paleti (matplotlib subplot'ları için - BGR'den dönüştürülmüş)
-        colors_rgb = [(b / 255.0, g / 255.0, r / 255.0) for (r, g, b) in colors_bgr]
+        fig.suptitle(f'Tırnak Tarama Analizi - {timestamp}', fontsize=14, fontweight='bold')
 
         # 1. Orijinal görüntü + Origin
         axes[0, 0].imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
@@ -717,27 +699,17 @@ class NailImagingPipeline:
         axes[0, 0].set_title('Orijinal Görüntü')
         axes[0, 0].axis('off')
 
-        # 2. Segmentasyon maskesi + tırnak numaraları
-        mask_color = cv2.cvtColor(binary_mask, cv2.COLOR_GRAY2BGR)
-        for i, nail in enumerate(all_nail_results):
-            color = colors_bgr[i % len(colors_bgr)]
-            cv2.drawContours(mask_color, [nail['contour']], -1, color, 3)
-            M = cv2.moments(nail['contour'])
-            if M['m00'] > 0:
-                cx = int(M['m10'] / M['m00'])
-                cy = int(M['m01'] / M['m00'])
-                cv2.putText(mask_color, str(nail['id']), (cx - 10, cy + 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
-        axes[0, 1].imshow(cv2.cvtColor(mask_color, cv2.COLOR_BGR2RGB))
-        axes[0, 1].set_title(f'AI Segmentasyonu ({len(all_nail_results)} tirnak)')
+        # 2. Segmentasyon maskesi
+        axes[0, 1].imshow(binary_mask, cmap='gray')
+        axes[0, 1].set_title('AI Segmentasyonu')
         axes[0, 1].axis('off')
 
-        # 3. Tarama path'leri (piksel uzayında) + tırnak numaraları
+        # 3. Tarama path'leri (piksel uzayında)
         path_image = original_image.copy()
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)]
 
         for i, nail in enumerate(all_nail_results):
-            color = colors_bgr[i % len(colors_bgr)]
-            nail_id = nail['id']
+            color = colors[i % len(colors)]
 
             # Kontur çiz
             cv2.drawContours(path_image, [nail['contour']], -1, color, 3)
@@ -745,14 +717,12 @@ class NailImagingPipeline:
             # Path çizgileri
             pixel_path = nail['pixel_path']
             if len(pixel_path) > 1:
-                # Başlangıç noktası - tırnak renginde daire + beyaz kenarlık
-                cv2.circle(path_image, pixel_path[0], 10, (255, 255, 255), -1)
-                cv2.circle(path_image, pixel_path[0], 8, color, -1)
-
-                # Bitiş noktası - tırnak renginde kare + beyaz kenarlık
-                ex, ey = pixel_path[-1]
-                cv2.rectangle(path_image, (ex - 8, ey - 8), (ex + 8, ey + 8), (255, 255, 255), -1)
-                cv2.rectangle(path_image, (ex - 6, ey - 6), (ex + 6, ey + 6), color, -1)
+                # Başlangıç ve bitiş
+                cv2.circle(path_image, pixel_path[0], 8, (0, 255, 0), -1)
+                cv2.rectangle(path_image,
+                              (pixel_path[-1][0] - 6, pixel_path[-1][1] - 6),
+                              (pixel_path[-1][0] + 6, pixel_path[-1][1] + 6),
+                              (255, 0, 0), -1)
 
                 # Path çizgisi
                 for j in range(1, len(pixel_path)):
@@ -762,52 +732,25 @@ class NailImagingPipeline:
                 for j in range(0, len(pixel_path), 10):
                     cv2.circle(path_image, pixel_path[j], 2, color, -1)
 
-            # Tırnak ID etiketi - kontur merkezine yaz
-            M = cv2.moments(nail['contour'])
-            if M['m00'] > 0:
-                cx = int(M['m10'] / M['m00'])
-                cy = int(M['m01'] / M['m00'])
-                # Beyaz arka plan + renkli metin
-                label = str(nail_id)
-                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
-                cv2.rectangle(path_image, (cx - tw // 2 - 4, cy - th - 8),
-                              (cx + tw // 2 + 4, cy + 4), (255, 255, 255), -1)
-                cv2.putText(path_image, label, (cx - tw // 2, cy),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
-
         axes[1, 0].imshow(cv2.cvtColor(path_image, cv2.COLOR_BGR2RGB))
         axes[1, 0].set_title('Zigzag Tarama Rotaları (Piksel)')
         axes[1, 0].axis('off')
 
-        # 4. Motor koordinat grafiği (mm) + tırnak numaraları
+        # 4. Motor koordinat grafiği (mm)
         for i, nail in enumerate(all_nail_results):
             motor_path = nail['motor_path']
             if motor_path:
                 x_coords = [x for x, y in motor_path]
                 y_coords = [y for x, y in motor_path]
-                color = colors_rgb[i % len(colors_rgb)]
 
+                color = np.array(colors[i % len(colors)]) / 255.0
                 axes[1, 1].plot(x_coords, y_coords, '-',
                                 color=color, linewidth=1, alpha=0.7,
-                                label=f"{nail['id']}. Tirnak ({len(motor_path)} nokta)")
+                                label=f"T{nail['id']} ({len(motor_path)} nokta)")
 
-                # Başlangıç - tırnak renginde daire
-                axes[1, 1].scatter(x_coords[0], y_coords[0], c=[color],
-                                   s=60, marker='o', edgecolors='white', linewidths=1, zorder=5)
-                # Bitiş - tırnak renginde kare
-                axes[1, 1].scatter(x_coords[-1], y_coords[-1], c=[color],
-                                   s=60, marker='s', edgecolors='white', linewidths=1, zorder=5)
-
-                # Tırnak ID etiketi - motor path merkezine yaz
-                mid_x = np.mean(x_coords)
-                mid_y = np.mean(y_coords)
-                axes[1, 1].annotate(str(nail['id']),
-                                    (mid_x, mid_y),
-                                    fontsize=14, fontweight='bold', color=color,
-                                    ha='center', va='center',
-                                    bbox=dict(boxstyle='round,pad=0.3',
-                                              facecolor='white', edgecolor=color, alpha=0.9),
-                                    zorder=10)
+                # Başlangıç ve bitiş
+                axes[1, 1].scatter(x_coords[0], y_coords[0], c=[color], s=50, marker='o')
+                axes[1, 1].scatter(x_coords[-1], y_coords[-1], c=[color], s=50, marker='s')
 
         # Motor home pozisyonu
         axes[1, 1].scatter([0], [0], c='red', s=100, marker='x', linewidth=2, label='Motor Home')
@@ -820,7 +763,7 @@ class NailImagingPipeline:
 
         axes[1, 1].set_xlabel('X (mm) - Motor Koordinatları')
         axes[1, 1].set_ylabel('Y (mm) - Motor Koordinatları')
-        axes[1, 1].set_title('Motor Koordinatları (mm) - Tarama Sırası')
+        axes[1, 1].set_title('Motor Koordinatları (mm)')
         axes[1, 1].grid(True, alpha=0.3)
         axes[1, 1].legend(loc='best', fontsize=8)
         axes[1, 1].axis('equal')

@@ -422,38 +422,6 @@ class NailScannerController:
 
         return True
 
-    def move_to_position_safe(self, target_x: float, target_y: float) -> bool:
-        """Tırnak geçişi için güvenli hareket: önce Y, sonra X (parmağa çarpmayı önle)"""
-        # Çalışma alanı kontrolü
-        if not (MOTOR_CONFIG['X_AXIS_MIN'] <= target_x <= MOTOR_CONFIG['X_AXIS_MAX']):
-            if SYSTEM_CONFIG['DEBUG_MODE']:
-                print(f"   ⚠️ X hedefi sınır dışı: {target_x:.2f} mm")
-            return False
-
-        if not (MOTOR_CONFIG['Y_AXIS_MIN'] <= target_y <= MOTOR_CONFIG['Y_AXIS_MAX']):
-            if SYSTEM_CONFIG['DEBUG_MODE']:
-                print(f"   ⚠️ Y hedefi sınır dışı: {target_y:.2f} mm")
-            return False
-
-        dy = target_y - self.current_pos['y']
-        dx = target_x - self.current_pos['x']
-
-        # Önce Y ekseni hareketi (parmaklar arası boşlukta ilerle)
-        if abs(dy) > 0.01:
-            y_steps = int(abs(dy) * MOTOR_CONFIG['Y_STEPS_PER_MM'])
-            direction = 1 if dy > 0 else -1
-            if not self.move_motor_steps('Y', y_steps, direction):
-                return False
-
-        # Sonra X ekseni hareketi (yeni tırnağa geç)
-        if abs(dx) > 0.01:
-            x_steps = int(abs(dx) * MOTOR_CONFIG['X_STEPS_PER_MM'])
-            direction = 1 if dx > 0 else -1
-            if not self.move_motor_steps('X', x_steps, direction):
-                return False
-
-        return True
-
     def perform_z_touch(self) -> bool:
         """
         Z ekseni dokunuş - FSR sensör ile geliştirilmiş versiyon
@@ -551,8 +519,7 @@ class NailScannerController:
                     break
 
                 # Tırnak değişimi kontrolü
-                is_nail_transition = current_nail_id != point.nail_id
-                if is_nail_transition:
+                if current_nail_id != point.nail_id:
                     if self.z_is_down:
                         print(f"   ⬆️ Z ekseni yukarı çekiliyor (tırnak değişimi)")
                         self.retract_z_axis()
@@ -566,14 +533,7 @@ class NailScannerController:
                 print(f"📍 {i + 1}/{len(self.scan_points)} - T{point.nail_id} P{point.index} ({point.x:.2f},{point.y:.2f}mm)", end=" ")
 
                 # X,Y hareketi (mm cinsinden)
-                # Tırnak geçişi: Z yukarı → Y → X (parmağa çarpmayı önle)
-                # Aynı tırnak: X → Y (normal hareket)
-                if is_nail_transition:
-                    moved = self.move_to_position_safe(point.x, point.y)
-                else:
-                    moved = self.move_to_position(point.x, point.y)
-
-                if moved:
+                if self.move_to_position(point.x, point.y):
                     # Z kontrolü
                     if not self.z_is_down:
                         print("⬇️", end=" ")
