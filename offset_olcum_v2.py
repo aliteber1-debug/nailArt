@@ -282,35 +282,43 @@ class SimpleOffsetCalibration:
         print("📊 KALİBRASYON SONUÇLARI")
         print("=" * 50)
         
+        # Yeni Z değeri
+        new_z = MOTOR_CONFIG.get('OFFSET_Z', 0) + self.offset_z
+
         print(f"\n🔹 Mevcut offset (shared_config.py):")
         print(f"   OFFSET_X: {current_x:.3f} mm")
         print(f"   OFFSET_Y: {current_y:.3f} mm")
-        
+        print(f"   OFFSET_Z: {MOTOR_CONFIG.get('OFFSET_Z', 0):.3f} mm")
+
         print(f"\n🔹 Yapılan düzeltme:")
         print(f"   X: {self.offset_x:+.3f} mm")
         print(f"   Y: {self.offset_y:+.3f} mm")
         print(f"   Z: {self.offset_z:+.3f} mm")
-        
+
         print(f"\n🔹 YENİ OFFSET DEĞERLERİ:")
         print(f"   OFFSET_X: {new_x:.3f} mm")
         print(f"   OFFSET_Y: {new_y:.3f} mm")
-        
+        print(f"   OFFSET_Z: {new_z:.3f} mm")
+
         print("\n" + "=" * 50)
         print("📝 shared_config.py'de MOTOR_CONFIG içine yazın:")
         print("=" * 50)
         print(f"    'OFFSET_X': {new_x:.2f},")
         print(f"    'OFFSET_Y': {new_y:.2f},")
+        print(f"    'OFFSET_Z': {new_z:.2f},")
         
         # Dosyaya kaydet
-        self._save_to_file(current_x, current_y, new_x, new_y)
+        self._save_to_file(current_x, current_y, new_x, new_y, new_z)
 
-    def _save_to_file(self, old_x, old_y, new_x, new_y):
+    def _save_to_file(self, old_x, old_y, new_x, new_y, new_z):
         """Sonuçları dosyaya kaydet"""
-        
+
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         filename = f"offset_result_{timestamp}.txt"
         filepath = os.path.join(PATHS['OUTPUT_DIR'], filename)
-        
+
+        old_z = MOTOR_CONFIG.get('OFFSET_Z', 0)
+
         with open(filepath, 'w') as f:
             f.write("# Offset Kalibrasyon Sonuçları\n")
             f.write(f"# Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -318,6 +326,7 @@ class SimpleOffsetCalibration:
             f.write(f"# Eski değerler:\n")
             f.write(f"# OFFSET_X: {old_x:.3f}\n")
             f.write(f"# OFFSET_Y: {old_y:.3f}\n")
+            f.write(f"# OFFSET_Z: {old_z:.3f}\n")
             f.write("\n")
             f.write(f"# Yapılan düzeltme:\n")
             f.write(f"# X: {self.offset_x:+.3f}\n")
@@ -327,6 +336,7 @@ class SimpleOffsetCalibration:
             f.write(f"# YENİ DEĞERLER (shared_config.py'ye yazın):\n")
             f.write(f"'OFFSET_X': {new_x:.2f},\n")
             f.write(f"'OFFSET_Y': {new_y:.2f},\n")
+            f.write(f"'OFFSET_Z': {new_z:.2f},\n")
         
         print(f"\n💾 Kaydedildi: {filename}")
 
